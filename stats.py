@@ -27,6 +27,27 @@ class BaseStatistics:
     supply_consumption_factor: float = 0.0
     recovery_rate: float = 0.0
 
+    def get_effective_attacks(self, target_hardness: float) -> float:
+        """
+        Calculates the number of attacks against a specific target.
+        Formula: Soft Attack * (1 - Hardness) + Hard Attack * Hardness
+        """
+        return (self.soft_attack * (1.0 - target_hardness)) + (self.hard_attack * target_hardness)
+
+    def get_battle_defense(self, is_attacker: bool) -> float:
+        """
+        Returns the relevant defense stat for the battle phase.
+        Attacker uses Breakthrough. Defender uses Defense.
+        """
+        return self.breakthrough if is_attacker else self.defense
+
+    def get_damage_dice_size(self, has_armor_advantage: bool) -> int:
+        """
+        Returns the size of the Organization damage die.
+        Standard is 1d4. If Armor > Piercing, it becomes 1d6.
+        """
+        return 6 if has_armor_advantage else 4
+
 def calculate_division_stats(battalion_stats: list[BaseStatistics], support_stats: list[BaseStatistics]) -> BaseStatistics:
     """
     Calculates the final statistics for a division based on its battalions and support companies.
@@ -58,14 +79,14 @@ def calculate_division_stats(battalion_stats: list[BaseStatistics], support_stat
     # 2. Averages (Organization)
     # Organization is the average of ALL units
     if all_stats:
-        final_stats.organization = sum(s.organization for s in all_stats) / len(all_stats)
-        final_stats.recovery_rate = sum(s.recovery_rate for s in all_stats) / len(all_stats)
+        final_stats.organization = fmean(s.organization for s in all_stats)
+        final_stats.recovery_rate = fmean(s.recovery_rate for s in all_stats)
 
     # 3. Special Formulas
     
     # Hardness: Average of Line Battalions ONLY (exclude support companies)
     if battalion_stats:
-        final_stats.hardness = sum(b.hardness for b in battalion_stats) / len(battalion_stats)
+        final_stats.hardness = fmean(b.hardness for b in battalion_stats)
     else:
         final_stats.hardness = 0.0
 
@@ -73,14 +94,14 @@ def calculate_division_stats(battalion_stats: list[BaseStatistics], support_stat
     armor_values = [s.armor for s in all_stats]
     if armor_values:
         max_armor = max(armor_values)
-        avg_armor = sum(armor_values) / len(armor_values)
+        avg_armor = fmean(armor_values)
         final_stats.armor = (0.4 * max_armor) + (0.6 * avg_armor)
 
     # Piercing: 40% of max + 60% of average (of ALL units)
     piercing_values = [s.piercing for s in all_stats]
     if piercing_values:
         max_piercing = max(piercing_values)
-        avg_piercing = sum(piercing_values) / len(piercing_values)
+        avg_piercing = fmean(piercing_values)
         final_stats.piercing = (0.4 * max_piercing) + (0.6 * avg_piercing)
 
     return final_stats
