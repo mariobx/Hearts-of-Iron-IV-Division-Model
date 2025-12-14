@@ -8,6 +8,7 @@ from modifiers import TerrainModifier
 import random
 import math
 import statistics
+import sys
 
 
 class Division:
@@ -25,9 +26,52 @@ class Division:
             raise ValueError("Division cannot have more than 25 battalions.")
         self.battalions.append(battalion)
 
+    # Mutually Exclusive Support Company Types
+    SUPPORT_TYPES = {
+        "Engineer": [
+            "Engineer Company", "Pioneers", "Assault Engineer Company", 
+            "Amphibious Tank Engineer Company", "Light Tank Engineer Company", 
+            "Medium Tank Engineer Company", "Heavy Tank Engineer Company", 
+            "Super Heavy Tank Engineer Company", "Modern Tank Engineer Company"
+        ],
+        "Recon": [
+            "Recon Company", "Motorized Recon Company", "Armored Car Recon Company", 
+            "Light Tank Recon Company", "Medium Tank Recon Company", 
+            "Heavy Tank Recon Company", "Super Heavy Tank Recon Company", 
+            "Modern Tank Recon Company", "Cavalry Recon Company", 
+            "Camel Recon Company", "Bicycle Recon Company", 
+            "Motorcycle Recon Company", "Long Range Patrol Company"
+        ],
+        "Military Police": ["Military Police", "Motorized Military Police"],
+        "Logistics": ["Logistics Company", "Winter Logistics Company", "Airborne Logistics Company"],
+        "Flame Tank": ["Light Flame Tank Company", "Medium Flame Tank Company", "Heavy Flame Tank Company"],
+        "Maintenance": ["Maintenance Company"], # Add variants if any exist
+        "Field Hospital": ["Field Hospital"],
+        "Signal": ["Signal Company"],
+    }
+
     def add_support_company(self, company: SupportCompany):
         if len(self.support_companies) >= 5:
             raise ValueError("Division cannot have more than 5 support companies.")
+            
+        # Check for duplicate types
+        new_type = None
+        for type_name, units in self.SUPPORT_TYPES.items():
+            if company.name in units:
+                new_type = type_name
+                break
+        
+        if new_type:
+            for existing_company in self.support_companies:
+                if existing_company.name in self.SUPPORT_TYPES[new_type]:
+                    # Already have a company of this type
+                    print(f"Warning: Cannot add {company.name}, division already has {existing_company.name} ({new_type}).")
+                    return
+
+        # Also check for exact duplicates (if not covered by types)
+        if any(c.name == company.name for c in self.support_companies):
+             return
+
         self.support_companies.append(company)
 
     def calculate_stats(self) -> BaseStatistics:
@@ -284,3 +328,97 @@ class Division:
             "duration_hours": hours_passed,
             "duration_days": hours_passed / 24.0
         }
+
+    def get_composition_grid(self) -> dict:
+        """
+        Returns a dictionary representing the HOI4-style grid layout.
+        Structure:
+        {
+            "support": [comp1, comp2, ...],  # Max 5
+            "regiments": [                   # Max 5 columns
+                [bat1, bat2, ...],           # Max 5 rows per column
+                ...
+            ]
+        }
+        """
+        grid = {
+            "support": self.support_companies[:5], # Ensure max 5
+            "regiments": []
+        }
+        
+        # Simple greedy fill: 5 battalions per column
+        # In HOI4, regiments are columns.
+        current_regiment = []
+        for battalion in self.battalions:
+            current_regiment.append(battalion)
+            if len(current_regiment) == 5:
+                grid["regiments"].append(current_regiment)
+                current_regiment = []
+        
+        # Add last partial regiment if exists
+        if current_regiment:
+            grid["regiments"].append(current_regiment)
+            
+        # Pad to 5 columns if needed (optional, but good for fixed grid)
+        # while len(grid["regiments"]) < 5:
+        #     grid["regiments"].append([])
+            
+        return grid
+
+    def print_composition_grid(self):
+        """
+        Prints the division composition in a 5x5 grid format with support companies on the left.
+        """
+        grid = self.get_composition_grid()
+        
+        print(f"\nDivision Template: {self.name}")
+        print("=" * 60)
+        
+        # Header
+        print(f"{'Support':<20} | {'Regiment 1':<15} {'Regiment 2':<15} {'Regiment 3':<15} {'Regiment 4':<15} {'Regiment 5':<15}")
+        print("-" * 100)
+        
+        # We need to iterate 5 rows
+        for row_idx in range(5):
+            # Support Company (Left Column)
+            if row_idx < len(grid["support"]):
+                support_str = grid["support"][row_idx].name
+            else:
+                support_str = "-"
+                
+            # Regiments (Columns 1-5)
+            regiment_strs = []
+            for col_idx in range(5):
+                # Check if this regiment exists
+                if col_idx < len(grid["regiments"]):
+                    regiment = grid["regiments"][col_idx]
+                    # Check if this row exists in the regiment
+                    if row_idx < len(regiment):
+                        regiment_strs.append(regiment[row_idx].name)
+                    else:
+                        regiment_strs.append("-")
+                else:
+                    regiment_strs.append("-")
+            
+            # Format row
+            row_str = f"{support_str:<20} | " + " ".join([f"{s:<15}" for s in regiment_strs])
+            print(row_str)
+            
+        print("=" * 60)
+
+    def save_template(self, filename: str):
+        """
+        Saves the division template grid and stats to a text file.
+        """
+        with open(filename, "w") as f:
+            # Redirect stdout to file for easy printing
+            original_stdout = sys.stdout
+            sys.stdout = f
+            
+            try:
+                self.print_composition_grid()
+                print("\n")
+                self.print_stats_table()
+            finally:
+                sys.stdout = original_stdout
+        print(f"Template saved to {filename}")
