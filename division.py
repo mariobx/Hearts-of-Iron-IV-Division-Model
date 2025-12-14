@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import List, Dict
 from battalion import Battalion
 from support_company import SupportCompany
@@ -102,7 +103,7 @@ class Division:
             
         return final_modifiers
 
-    def battle(self, other: 'Division', terrain: Terrain) -> dict:
+    def battle(self, other: Division, terrain: Terrain, verbose: bool = False) -> dict:
         """
         Simulates a land battle between this division (attacker) and another (defender).
         Returns a dictionary with the winner, final stats, and battle duration.
@@ -134,6 +135,20 @@ class Division:
         # Battle Loop
         while attacker_org > 0 and defender_org > 0:
             hours_passed += 1
+            half_weeks_passed = hours_passed / 84
+            
+            if verbose and half_weeks_passed % 0.5 == 0: #half a week
+                print(f"\n--- Weeks passed: {half_weeks_passed:.1f} ---")
+                print(f"{self.name} (ORG: {attacker_org:.1f}, HP: {attacker_hp:.1f}) vs {other.name} (ORG: {defender_org:.1f}, HP: {defender_hp:.1f})")
+
+            # --- Calculate Damage Scaling (HP Ratio) ---
+            # "As a unit takes HP damage... scaling is rounded to multiples of 10%"
+            # E.g. 0.99 -> 0.9, 1.0 -> 1.0
+            att_hp_ratio = attacker_hp / attacker_stats.max_hp
+            def_hp_ratio = defender_hp / defender_stats.max_hp
+            
+            att_dmg_scale = math.floor(att_hp_ratio * 10) / 10.0
+            def_dmg_scale = math.floor(def_hp_ratio * 10) / 10.0
 
             # --- Determine Effective Attacks & Defenses ---
             # Base Attacks
@@ -219,8 +234,13 @@ class Division:
                     org_dmg *= att_dmg_mod
                     hp_dmg *= att_dmg_mod
                     
+                    # Apply HP Scaling
+                    org_dmg *= att_dmg_scale
+                    hp_dmg *= att_dmg_scale
+                    
                     defender_org -= org_dmg
                     defender_hp -= hp_dmg
+                    
 
             # 2. Defender Strikes Attacker
             num_attacks_vs_att = get_count(def_total_attacks)
@@ -241,6 +261,10 @@ class Division:
                     # Apply Damage Reduction
                     org_dmg *= def_dmg_mod
                     hp_dmg *= def_dmg_mod
+
+                    # Apply HP Scaling
+                    org_dmg *= def_dmg_scale
+                    hp_dmg *= def_dmg_scale
                     
                     attacker_org -= org_dmg
                     attacker_hp -= hp_dmg
